@@ -1,25 +1,23 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { User as UserIcon, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-// import { useAuth } from '../../hooks/useAuth';
-// import { authService } from '../../services/authService';
-// import type { User } from '../types/auth';
-// import { useAppDispatch, useAppSelector } from '../../hooks/useRedux';
+import { useAuth } from '../../hooks/useAuth';
+//import { authService } from '../../services/authService';
+import { selectCurrentUser } from '../../lib/authSelector';
+import type { User } from '../types/auth';
+import { useSelector } from 'react-redux';
 
 export function Navigation() {
-  // const dispatch = useAppDispatch();
   const [showProfile, setShowProfile] = useState(false);
-  // const { logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
-  // const currentUser: User | null = authService.getCurrentUser();
+  const currentUser: User | null = useSelector(selectCurrentUser);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // For demonstration; replace with actual user data
-  const userName = /* currentUser?.username || */ "Default User";
-  const userEmail = /* currentUser?.email || */ "";
-  const profileImage =
-    /* currentUser?.profilePicture || */
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
+  const userName = currentUser?.name || "Default User";
+  const userEmail = currentUser?.email || "";
+  const profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
 
   // Toggle profile dropdown
   const handleProfileToggle = useCallback(() => {
@@ -56,13 +54,13 @@ export function Navigation() {
     }
   }, [showProfile, handleMouseLeave]);
 
-  const handleProfileClick = useCallback(() => {
+  /* const handleProfileClick = useCallback(() => {
     navigate('/profile');
-  }, [navigate]);
+  }, [navigate]); */
 
   const handleLogout = useCallback(async () => {
     try {
-      // await logout();
+      await logout();
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
