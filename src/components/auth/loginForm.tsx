@@ -34,11 +34,11 @@ export function LoginForm() {
       toast.success('Login successful! Redirecting to dashboard...');
       setRedirecting(true);
       const timer = setTimeout(() => {
-        setRedirecting(false);
         navigate('/dashboard');
+        setRedirecting(false);
       }, 2000);
 
-      return () => clearTimeout(timer); // Cleanup timeout on unmount
+      return () => clearTimeout(timer); 
     }
   }, [isAuthenticated, navigate]);
 

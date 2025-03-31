@@ -2,10 +2,12 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-//import { authService } from '../../services/authService';
-import { selectCurrentUser } from '../../lib/authSelector';
 import type { User } from '../types/auth';
 import { useSelector } from 'react-redux';
+import { RootState } from '../../hooks/useRedux';
+import toast from 'react-hot-toast';
+
+const selectCurrentUser = (state: RootState): User | null => state.auth.user;
 
 export function Navigation() {
   const [showProfile, setShowProfile] = useState(false);
@@ -14,7 +16,6 @@ export function Navigation() {
   const currentUser: User | null = useSelector(selectCurrentUser);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // For demonstration; replace with actual user data
   const userName = currentUser?.name || "Default User";
   const userEmail = currentUser?.email || "";
   const profileImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}`;
@@ -54,18 +55,16 @@ export function Navigation() {
     }
   }, [showProfile, handleMouseLeave]);
 
-  /* const handleProfileClick = useCallback(() => {
-    navigate('/profile');
-  }, [navigate]); */
-
   const handleLogout = useCallback(async () => {
     try {
       await logout();
+      toast.success("Logged out successfully");
       navigate('/login');
     } catch (error) {
+      toast.error("Logout failed. Please try again.");
       console.error('Logout failed:', error);
     }
-  }, [navigate]);
+  }, [logout, navigate]);
 
   return (
     <header
@@ -124,18 +123,6 @@ export function Navigation() {
               </p>
             </div>
             <div className="p-2">
-              {/* <button
-                onClick={handleProfileClick}
-                className="
-                  w-full flex items-center px-3 py-2 text-sm 
-                  text-gray-600 dark:text-gray-300 rounded-md 
-                  hover:bg-white/10 dark:hover:bg-gray-800/50 
-                  transition-all duration-200
-                "
-              >
-                <UserIcon className="w-4 h-4 mr-2" />
-                View Profile
-              </button> */}
               <button
                 onClick={handleLogout}
                 className="

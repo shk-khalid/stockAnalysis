@@ -9,14 +9,20 @@ const api = axios.create({
   },
 });
 
-// Add token to requests if it exists
+// Add token to requests if it exists in localStorage under "auth_tokens"
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers = config.headers || {};
-      // Change from "Token" to "Bearer"
-      config.headers.Authorization = `Bearer ${token}`;
+    const tokens = localStorage.getItem('auth_tokens');
+    if (tokens) {
+      try {
+        const { access } = JSON.parse(tokens);
+        if (access) {
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${access}`;
+        }
+      } catch (error) {
+        console.error('Error parsing auth_tokens from localStorage:', error);
+      }
     }
     return config;
   },

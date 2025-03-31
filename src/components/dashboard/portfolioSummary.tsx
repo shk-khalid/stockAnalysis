@@ -1,31 +1,74 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
-import { DollarSign, TrendingUp, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { DollarSign, TrendingUp, Calendar, TrendingDown } from 'lucide-react';
+import { getWatchlistOverview, WatchlistOverview } from '../../services/stockService';
+import { format } from 'date-fns';
+import { Loading } from '../common/loading';
 
-interface PortfolioSummaryProps {
-  totalValue: number;
-  totalGainLoss: number;
-}
+export function PortfolioSummary() {
+  const [overview, setOverview] = useState<WatchlistOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-const mockPortfolioHistory = Array.from({ length: 30 }, (_, i) => ({
-  date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toLocaleDateString(),
-  value: 100000 + Math.random() * 20000,
-}));
+  useEffect(() => {
+    const fetchOverview = async () => {
+      try {
+        setIsLoading(true);
+        const data = await getWatchlistOverview();
+        setOverview(data);
+        setError(null);
+      } catch (err) {
+        setError('Failed to fetch portfolio data');
+        console.error('Error fetching portfolio overview:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-const mockDividends = [
-  { symbol: 'AAPL', date: '2024-03-25', amount: 0.24, yield: '0.51%' },
-  { symbol: 'MSFT', date: '2024-04-08', amount: 0.75, yield: '0.82%' },
-  { symbol: 'JNJ', date: '2024-03-19', amount: 1.19, yield: '2.91%' },
-];
+    fetchOverview();
+  }, []);
 
-export function PortfolioSummary({ totalValue, totalGainLoss }: PortfolioSummaryProps) {
+  // Transform historical data for the chart
+  const chartData = overview?.stocks.reduce((acc, stock) => {
+    stock.historicalData.forEach((dataPoint) => {
+      const date = format(new Date(dataPoint.date), 'MMM dd');
+      const existingPoint = acc.find(point => point.date === date);
+      if (existingPoint) {
+        existingPoint.value += dataPoint.price;
+      } else {
+        acc.push({ date, value: dataPoint.price });
+      }
+    });
+    return acc;
+  }, [] as { date: string; value: number }[]) || [];
+
+  // Get upcoming dividends
+  const upcomingDividends = overview?.stocks
+    .filter(stock => stock.mostRecentDividend)
+    .map(stock => ({
+      symbol: stock.symbol,
+      date: stock.mostRecentDividend.paymentDate,
+      amount: stock.mostRecentDividend.amount,
+      yield: (stock.mostRecentDividend.yield * 100).toFixed(2) + '%'
+    }))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 3) || [];
+
+  const overallTotalValue = overview?.overallTotalValue ?? 0;
+  const overallTotalGainLoss = overview?.overallTotalGainLoss ?? 0;
+
+  if (isLoading) {
+    return <Loading fullScreen />;
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-8">
+        <p className="text-red-400">{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
       {/* Main Portfolio Value Card */}
@@ -38,7 +81,7 @@ export function PortfolioSummary({ totalValue, totalGainLoss }: PortfolioSummary
             <div>
               <p className="text-sm text-gray-300">Total Value</p>
               <p className="text-2xl font-bold text-white">
-                ${totalValue.toLocaleString()}
+                ${overallTotalValue.toLocaleString()}
               </p>
             </div>
             <DollarSign className="h-8 w-8 text-[rgb(var(--color-mikado-yellow))]" />
@@ -46,11 +89,15 @@ export function PortfolioSummary({ totalValue, totalGainLoss }: PortfolioSummary
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-300">Total Gain/Loss</p>
-              <p className={`text-2xl font-bold ${totalGainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {totalGainLoss >= 0 ? '+' : ''}{totalGainLoss.toLocaleString()}
+              <p className={`text-2xl font-bold ${overallTotalGainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {overallTotalGainLoss >= 0 ? '+' : ''}{overallTotalGainLoss.toLocaleString()}
               </p>
             </div>
-            <TrendingUp className={`h-8 w-8 ${totalGainLoss >= 0 ? 'text-green-400' : 'text-red-400'}`} />
+            {overallTotalGainLoss >= 0 ? (
+              <TrendingUp className="h-8 w-8 text-green-400" />
+            ) : (
+              <TrendingDown className="h-8 w-8 text-red-400" />
+            )}
           </div>
         </div>
       </div>
@@ -61,38 +108,49 @@ export function PortfolioSummary({ totalValue, totalGainLoss }: PortfolioSummary
           Portfolio Performance
         </h2>
         <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mockPortfolioHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-oxford-blue))" />
-              <XAxis 
-                dataKey="date" 
-                stroke="#9ca3af"
-                tick={{ fill: '#9ca3af' }}
-              />
-              <YAxis 
-                stroke="#9ca3af"
-                tick={{ fill: '#9ca3af' }}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgb(var(--color-rich-black))',
-                  border: `1px solid rgb(var(--color-yale-blue))`,
-                  borderRadius: '0.5rem',
-                }}
-                labelStyle={{ color: '#9ca3af' }}
-                itemStyle={{ color: 'rgb(var(--color-mikado-yellow))' }}
-                formatter={(value: number) => [`$${value.toLocaleString()}`, 'Portfolio Value']}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="value" 
-                stroke="rgb(var(--color-mikado-yellow))"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-oxford-blue))" />
+                <XAxis 
+                  dataKey="date" 
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af' }}
+                />
+                <YAxis 
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af' }}
+                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'rgb(var(--color-rich-black))',
+                    border: `1px solid rgb(var(--color-yale-blue))`,
+                    borderRadius: '0.5rem',
+                  }}
+                  labelStyle={{ color: '#9ca3af' }}
+                  itemStyle={{ color: 'rgb(var(--color-mikado-yellow))' }}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Portfolio Value']}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="rgb(var(--color-mikado-yellow))"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: 'rgb(var(--color-mikado-yellow))' }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex items-center justify-center bg-[rgb(var(--color-rich-black))]/50 rounded-lg">
+              <div className="text-center">
+                <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-300 font-medium">No performance data available</p>
+                <p className="text-sm text-gray-400 mt-1">Chart data will appear here once available</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -104,23 +162,33 @@ export function PortfolioSummary({ totalValue, totalGainLoss }: PortfolioSummary
           </h2>
           <Calendar className="h-6 w-6 text-[rgb(var(--color-mikado-yellow))]" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {mockDividends.map((dividend) => (
-            <div 
-              key={dividend.symbol}
-              className="bg-[rgb(var(--color-yale-blue))] rounded-lg p-4 border border-[rgb(var(--color-yale-blue))]"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-semibold text-white">{dividend.symbol}</h3>
-                <span className="text-sm text-[rgb(var(--color-mikado-yellow))]">{dividend.yield}</span>
+        {upcomingDividends.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {upcomingDividends.map((dividend) => (
+              <div 
+                key={dividend.symbol}
+                className="bg-[rgb(var(--color-yale-blue))] rounded-lg p-4 border border-[rgb(var(--color-yale-blue))]"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-semibold text-white">{dividend.symbol}</h3>
+                  <span className="text-sm text-[rgb(var(--color-mikado-yellow))]">{dividend.yield}</span>
+                </div>
+                <p className="text-sm text-gray-300">
+                  Payment Date: {format(new Date(dividend.date), 'MMM dd, yyyy')}
+                </p>
+                <p className="text-lg font-semibold text-white mt-2">
+                  ${dividend.amount.toFixed(2)} per share
+                </p>
               </div>
-              <p className="text-sm text-gray-300">Payment Date: {dividend.date}</p>
-              <p className="text-lg font-semibold text-white mt-2">
-                ${dividend.amount.toFixed(2)} per share
-              </p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 bg-[rgb(var(--color-rich-black))]/50 rounded-lg">
+            <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-300 font-medium">No upcoming dividends</p>
+            <p className="text-sm text-gray-400 mt-1">Dividend information will appear here when available</p>
+          </div>
+        )}
       </div>
     </div>
   );

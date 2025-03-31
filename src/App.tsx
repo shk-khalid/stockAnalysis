@@ -51,16 +51,16 @@ function App() {
           />
         </Routes>
       </Router>
-      
+
       <Toaster
         position="top-right"
         reverseOrder={false}
         toastOptions={{
           duration: 2000,
           style: {
-            background: '#0f172a',
-            color: '#f9fafb',
-            border: '1px solid #1e293b',
+            background: 'rgb(var(--color-oxford-blue) / 1)', 
+            color: 'rgb(var(--color-gold) / 1)',
+            border: '1px solid rgb(var(--color-mikado-yellow) / 1)',
           },
         }}
       />
