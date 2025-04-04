@@ -1,27 +1,14 @@
-import { Bell, AlertTriangle, ChevronDown, ChevronUp, Clock, DollarSign } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, AlertTriangle, ChevronDown, ChevronUp, Clock, DollarSign, ArrowUpDown, Search, Wifi, WifiOff } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useAlertWebSocket } from '../../hooks/useAlerts';
 
-interface Alert {
-  symbol: string;
-  type: string;
-  message: string;
-  severity: string;
-  timestamp: string;
-  triggerPrice: number;
-}
-
-interface AlertHistoryProps {
-  alerts: Alert[];
-}
-
-export function AlertHistory({ alerts }: AlertHistoryProps) {
+export function AlertHistory() {
+  const { alerts, isConnected } = useAlertWebSocket();
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isExpanded, setIsExpanded] = useState<{ [key: string]: boolean }>({});
-
-  const filteredAlerts = alerts.filter(alert => {
-    if (selectedFilter === 'all') return true;
-    return alert.severity === selectedFilter;
-  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selectedDate, setSelectedDate] = useState<string>('all');
 
   const toggleExpand = (timestamp: string) => {
     setIsExpanded(prev => ({
@@ -29,6 +16,43 @@ export function AlertHistory({ alerts }: AlertHistoryProps) {
       [timestamp]: !prev[timestamp]
     }));
   };
+
+  const expandAll = () => {
+    const expandedState: { [key: string]: boolean } = {};
+    filteredAlerts.forEach(alert => {
+      expandedState[alert.timestamp] = true;
+    });
+    setIsExpanded(expandedState);
+  };
+
+  const collapseAll = () => {
+    setIsExpanded({});
+  };
+
+  // Get unique dates from alerts
+  const uniqueDates = useMemo(() => {
+    const dates = alerts.map(alert => 
+      new Date(alert.timestamp).toLocaleDateString()
+    );
+    return ['all', ...Array.from(new Set(dates))];
+  }, [alerts]);
+
+  const filteredAlerts = useMemo(() => {
+    return alerts
+      .filter(alert => {
+        const matchesFilter = selectedFilter === 'all' || alert.severity === selectedFilter;
+        const matchesSearch = alert.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            alert.message.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDate = selectedDate === 'all' || 
+                          new Date(alert.timestamp).toLocaleDateString() === selectedDate;
+        return matchesFilter && matchesSearch && matchesDate;
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.timestamp).getTime();
+        const dateB = new Date(b.timestamp).getTime();
+        return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+      });
+  }, [alerts, selectedFilter, searchQuery, sortOrder, selectedDate]);
 
   return (
     <div className="bg-[rgb(var(--color-oxford-blue))] rounded-lg shadow-lg border border-[rgb(var(--color-yale-blue))]">
@@ -39,25 +63,80 @@ export function AlertHistory({ alerts }: AlertHistoryProps) {
             <h2 className="text-xl font-semibold text-[rgb(var(--color-mikado-yellow))]">
               Alert History
             </h2>
+            {isConnected ? (
+              <div className="flex items-center space-x-1 text-green-400">
+                <Wifi className="h-4 w-4" />
+                <span className="text-xs">Connected</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1 text-red-400">
+                <WifiOff className="h-4 w-4" />
+                <span className="text-xs">Reconnecting...</span>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
-            <select
-              value={selectedFilter}
-              onChange={(e) => setSelectedFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] focus:outline-none focus:border-[rgb(var(--color-mikado-yellow))] text-sm"
+            <button
+              onClick={isExpanded ? collapseAll : expandAll}
+              className="px-3 py-1.5 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] hover:border-[rgb(var(--color-mikado-yellow))] transition-colors text-sm"
             >
-              <option value="all">All Alerts</option>
-              <option value="alert">Critical</option>
-              <option value="warning">Warnings</option>
-            </select>
+              {Object.keys(isExpanded).length ? 'Collapse All' : 'Expand All'}
+            </button>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 mb-6">
+          <div className="flex-1 min-w-[200px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search alerts..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] focus:outline-none focus:border-[rgb(var(--color-mikado-yellow))] text-sm"
+              />
+            </div>
+          </div>
+
+          <select
+            value={selectedFilter}
+            onChange={(e) => setSelectedFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] focus:outline-none focus:border-[rgb(var(--color-mikado-yellow))] text-sm"
+          >
+            <option value="all">All Severities</option>
+            <option value="alert">Critical</option>
+            <option value="warning">Warnings</option>
+          </select>
+
+          <select
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] focus:outline-none focus:border-[rgb(var(--color-mikado-yellow))] text-sm"
+          >
+            {uniqueDates.map(date => (
+              <option key={date} value={date}>
+                {date === 'all' ? 'All Dates' : date}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="px-3 py-2 rounded-lg bg-[rgb(var(--color-rich-black))] text-white border border-[rgb(var(--color-yale-blue))] hover:border-[rgb(var(--color-mikado-yellow))] transition-colors flex items-center space-x-2"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            <span className="text-sm">{sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}</span>
+          </button>
         </div>
         
         {filteredAlerts.length === 0 ? (
           <div className="text-center py-12 bg-[rgb(var(--color-rich-black))] rounded-lg">
             <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-300 font-medium">No alerts to display</p>
-            <p className="text-sm text-gray-400 mt-1">Alerts will appear here when triggered</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {searchQuery ? 'Try adjusting your search or filters' : 'Alerts will appear here when triggered'}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -74,7 +153,7 @@ export function AlertHistory({ alerts }: AlertHistoryProps) {
                 >
                   <button
                     onClick={() => toggleExpand(alert.timestamp)}
-                    className="w-full px-4 py-3 flex items-start justify-between group"
+                    className="w-full px-4 py-3 flex items-start justify-between group hover:bg-black/10 transition-colors"
                   >
                     <div className="flex items-start space-x-3">
                       <div className={`mt-1 p-1.5 rounded-full ${
@@ -124,6 +203,10 @@ export function AlertHistory({ alerts }: AlertHistoryProps) {
                         <div className="flex items-center space-x-2 text-sm text-gray-400">
                           <DollarSign className="h-4 w-4" />
                           <span>Trigger Price: ${alert.triggerPrice.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-sm text-gray-400">
+                          <DollarSign className="h-4 w-4" />
+                          <span>Current Price: ${alert.currentPrice.toFixed(2)}</span>
                         </div>
                       </div>
                     </div>

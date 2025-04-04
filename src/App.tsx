@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './pages/landingPage';
 import { LoginForm } from './components/auth/loginForm';
 import { RegisterForm } from './components/auth/registerForm';
@@ -9,48 +9,46 @@ import { Loading } from './components/common/loading';
 import { Toaster } from 'react-hot-toast';
 import { sessionService } from './services/sessionService';
 
-function ProtectedRoute({ children }: { children: JSX.Element }) {
+function App() {
   const { isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (loading) {
     return <Loading fullScreen />;
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
-}
-
-function App() {
   useEffect(() => {
-    // Initialize session monitoring
-    sessionService.init();
+    if (isAuthenticated) {
+      // Initialize session management when user is authenticated
+      sessionService.init();
 
-    // Cleanup on component unmount
-    return () => {
-      sessionService.cleanup();
-    };
-  }, []);
+      // Cleanup on unmount
+      return () => {
+        sessionService.cleanup();
+      };
+    } else {
+      // If not authenticated and not already on login or register page, redirect to login
+      const publicPaths = ['/login', '/register'];
+      if (!publicPaths.includes(location.pathname)) {
+        navigate('/login');
+      }
+    }
+  }, [isAuthenticated, navigate, location]);
 
   return (
     <div>
-      <Router>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginForm />} />
-          <Route path="/register" element={<RegisterForm />} />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </Router>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="/register" element={<RegisterForm />} />
+        <Route
+          path="/dashboard"
+          element={
+            <DashboardPage />
+          }
+        />
+      </Routes>
 
       <Toaster
         position="top-right"
@@ -58,7 +56,7 @@ function App() {
         toastOptions={{
           duration: 2000,
           style: {
-            background: 'rgb(var(--color-oxford-blue) / 1)', 
+            background: 'rgb(var(--color-oxford-blue) / 1)',
             color: 'rgb(var(--color-gold) / 1)',
             border: '1px solid rgb(var(--color-mikado-yellow) / 1)',
           },

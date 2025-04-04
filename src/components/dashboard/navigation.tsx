@@ -59,7 +59,6 @@ export function Navigation() {
     try {
       await logout();
       toast.success("Logged out successfully");
-      navigate('/login');
     } catch (error) {
       toast.error("Logout failed. Please try again.");
       console.error('Logout failed:', error);
