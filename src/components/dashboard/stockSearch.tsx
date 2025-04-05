@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import { usePopper } from 'react-popper';
 import { Search, Plus, Loader, History } from 'lucide-react';
 import { useDebounce } from '../../hooks/useDebounce';
-import { StockService, SearchResult } from '../../services/stockService';
+import { StockService } from '../../services/stockService';
+import { SearchResult } from '../types/stock';
 
 interface StockSearchProps {
   onAddToWatchlist: (stock: SearchResult, group: string) => void;

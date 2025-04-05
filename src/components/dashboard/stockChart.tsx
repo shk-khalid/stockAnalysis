@@ -1,13 +1,10 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
+import { HistoricalData } from '../types/stock';
 
-interface ChartData {
-  day: number;
-  price: number;
-}
 
 interface StockChartProps {
-  data: ChartData[];
+  data: HistoricalData[];
 }
 
 export function StockChart({ data }: StockChartProps) {

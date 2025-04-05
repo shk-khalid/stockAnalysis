@@ -3,6 +3,7 @@ import type { RootState } from './useRedux';
 import { login, register, logout } from './slices/authSlice';
 import type { AppDispatch } from './useRedux';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 export function useAuth() {
   const dispatch = useDispatch<AppDispatch>();
@@ -12,9 +13,11 @@ export function useAuth() {
   const handleLogout = async () => {
     try {
       await dispatch(logout());
+      toast.success('Logged out successfully');
       navigate('/login');
     } catch (error) {
       console.error('Logout failed:', error);
+      toast.error('Logout failed. Please try again.');
     }
   };
 

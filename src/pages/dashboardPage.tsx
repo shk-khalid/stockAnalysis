@@ -1,92 +1,150 @@
-import React, { useState } from 'react';
-import { Navigation } from '../components/dashboard/navigation';
+import React, { useState, useEffect } from 'react';
+import {
+  createWatchlist,
+  deleteWatchlist,
+  getWatchlists,
+  getWatchlistOverview,
+} from '../services/watchlistService';
+import { Navigation } from '../components/common/navigation';
 import { PortfolioSummary } from '../components/dashboard/portfolioSummary';
 import { StockSearch } from '../components/dashboard/stockSearch';
 import { Watchlist } from '../components/dashboard/watchList';
 import { AlertHistory } from '../components/dashboard/alertHistory';
-import { watchlistGroups as initialWatchlistGroups, alertsData } from '../data/mockData';
-
-// Define types for Stock and Alert
-export interface Alert {
-  price: number;
-  type: 'above' | 'below';
-}
-
-export interface Stock {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  alerts: Alert[];
-  pinned: boolean;
-  sector: string;
-  marketCap: string;
-  shares: number;
-  avgPrice: number;
-  chartData: Array<{ day: number; price: number }>;
-}
-
-// Optionally, if your mock data doesn't match these types (e.g. alerts are string[]),
-// you can cast it as shown below.
-const initialGroups = initialWatchlistGroups as unknown as Record<string, Stock[]>;
+import type { Watchlist as WLType, Stock, Alert } from '../components/types/stock';
 
 export const DashboardPage: React.FC = () => {
-  const [watchlistGroups, setWatchlistGroups] = useState<Record<string, Stock[]>>(initialGroups);
-  const [activeWatchlist, setActiveWatchlist] = useState<string>('Tech Stocks');
+  const [watchlists, setWatchlists] = useState<WLType[]>([]);
+  const [watchlistMap, setWatchlistMap] = useState<Record<string, number>>({});
+  const [watchlistGroups, setWatchlistGroups] = useState<Record<string, Stock[]>>({});
+  const [activeWatchlist, setActiveWatchlist] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>('symbol');
   const [filterSector, setFilterSector] = useState<string>('all');
   const [showCharts, setShowCharts] = useState<Record<string, boolean>>({});
 
-  const totalValue = Object.values(watchlistGroups).flat().reduce((acc, stock: Stock) => {
-    return acc + stock.price * stock.shares;
-  }, 0);
+  // 1) Load all watchlists on mount
+  useEffect(() => {
+    async function loadLists() {
+      setLoading(true);
+      setError(null);
+      try {
+        const lists = await getWatchlists();
+        setWatchlists(lists);
 
-  const totalGainLoss = Object.values(watchlistGroups).flat().reduce((acc, stock: Stock) => {
-    return acc + ((stock.price - stock.avgPrice) * stock.shares);
-  }, 0);
+        const map: Record<string, number> = {};
+        lists.forEach((wl) => (map[wl.name] = wl.id));
+        setWatchlistMap(map);
+
+        if (lists.length) setActiveWatchlist(lists[0].name);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadLists();
+  }, []);
+
+  // 2) Whenever activeWatchlist changes, fetch its overview
+  useEffect(() => {
+    if (!activeWatchlist) return;
+    const id = watchlistMap[activeWatchlist];
+    if (id == null) return;
+
+    async function loadOverview() {
+      setError(null);
+      try {
+        const stocks = await getWatchlistOverview(id);
+        setWatchlistGroups((prev) => ({
+          ...prev,
+          [activeWatchlist]: stocks,
+        }));
+      } catch (err: any) {
+        setError(err.message);
+      }
+    }
+    loadOverview();
+  }, [activeWatchlist, watchlistMap]);
+
+  // 3) Create a new watchlist
+  const handleAddGroup = async (name: string) => {
+    setError(null);
+    try {
+      const newList = await createWatchlist(name);
+      setWatchlists((prev) => [...prev, newList]);
+      setWatchlistMap((prev) => ({ ...prev, [newList.name]: newList.id }));
+      setWatchlistGroups((prev) => ({ ...prev, [newList.name]: [] }));
+      setActiveWatchlist(newList.name);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // 4) Delete an existing watchlist
+  const handleDeleteGroup = async (name: string) => {
+    const id = watchlistMap[name];
+    if (id == null) return;
+    if (!window.confirm(`Delete watchlist "${name}"?`)) return;
+
+    setError(null);
+    try {
+      await deleteWatchlist(id);
+      setWatchlists((prev) => prev.filter((w) => w.name !== name));
+      setWatchlistMap((prev) => {
+        const copy = { ...prev };
+        delete copy[name];
+        return copy;
+      });
+      setWatchlistGroups((prev) => {
+        const copy = { ...prev };
+        delete copy[name];
+        return copy;
+      });
+      if (activeWatchlist === name) {
+        const remaining = watchlists.filter((w) => w.name !== name);
+        setActiveWatchlist(remaining[0]?.name || '');
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // 5) All your existing handlers
 
   const toggleChart = (symbol: string) => {
-    setShowCharts(prev => ({ ...prev, [symbol]: !prev[symbol] }));
+    setShowCharts((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   };
 
   const togglePin = (symbol: string) => {
-    setWatchlistGroups(prev => {
-      const updatedGroup = (prev[activeWatchlist] || []).map((stock: Stock) => {
-        if (stock.symbol === symbol) {
-          return { ...stock, pinned: !stock.pinned };
-        }
-        return stock;
-      });
-      return { ...prev, [activeWatchlist]: updatedGroup };
+    setWatchlistGroups((prev) => {
+      const updated = (prev[activeWatchlist] || []).map((stock) =>
+        stock.symbol === symbol ? { ...stock, pinned: !stock.pinned } : stock
+      );
+      return { ...prev, [activeWatchlist]: updated };
     });
   };
 
   const addAlert = (symbol: string, alert: Alert) => {
-    setWatchlistGroups(prev => {
-      const updatedGroup = (prev[activeWatchlist] || []).map((stock: Stock) => {
-        if (stock.symbol === symbol) {
-          return { ...stock, alerts: [...stock.alerts, alert] };
-        }
-        return stock;
-      });
-      return { ...prev, [activeWatchlist]: updatedGroup };
+    setWatchlistGroups((prev) => {
+      const updated = (prev[activeWatchlist] || []).map((stock) =>
+        stock.symbol === symbol ? { ...stock, alerts: [...stock.alerts, alert] } : stock
+      );
+      return { ...prev, [activeWatchlist]: updated };
     });
   };
 
   const removeAlert = (symbol: string, alertIndex: number) => {
-    setWatchlistGroups(prev => {
-      const updatedGroup = (prev[activeWatchlist] || []).map((stock: Stock) => {
-        if (stock.symbol === symbol) {
-          const newAlerts = stock.alerts.filter((_: Alert, idx: number) => idx !== alertIndex);
-          return { ...stock, alerts: newAlerts };
-        }
-        return stock;
-      });
-      return { ...prev, [activeWatchlist]: updatedGroup };
+    setWatchlistGroups((prev) => {
+      const updated = (prev[activeWatchlist] || []).map((stock) =>
+        stock.symbol === symbol
+          ? { ...stock, alerts: stock.alerts.filter((_, i) => i !== alertIndex) }
+          : stock
+      );
+      return { ...prev, [activeWatchlist]: updated };
     });
   };
 
-  // Update the type of stock parameter here as needed.
   const handleAddToWatchlist = (
     stock: Omit<Stock, 'alerts' | 'pinned' | 'shares' | 'avgPrice' | 'chartData'> & { price: number },
     group: string
@@ -99,24 +157,15 @@ export const DashboardPage: React.FC = () => {
       marketCap: 'Large',
       shares: 0,
       avgPrice: stock.price,
-      chartData: Array.from({ length: 7 }, (_, i: number) => ({
-        day: i + 1,
+      chartData: Array.from({ length: 7 }, (_, i) => ({
+        date: i + 1,
         price: stock.price + (Math.random() - 0.5) * 10,
       })),
     };
-
-    setWatchlistGroups(prev => ({
+    setWatchlistGroups((prev) => ({
       ...prev,
       [group]: [...(prev[group] || []), newStock],
     }));
-  };
-
-  const addGroup = (name: string) => {
-    setWatchlistGroups(prev => ({
-      ...prev,
-      [name]: [],
-    }));
-    setActiveWatchlist(name);
   };
 
   return (
@@ -124,36 +173,49 @@ export const DashboardPage: React.FC = () => {
       <Navigation />
 
       <main className="w-full px-4 pt-16 sm:px-6 lg:px-8 py-8">
-        <PortfolioSummary totalValue={totalValue} totalGainLoss={totalGainLoss} />
+        {error && (
+          <div className="mb-4 p-3 bg-red-800 text-white rounded">
+            {error}
+          </div>
+        )}
 
-        <StockSearch 
-          onAddToWatchlist={handleAddToWatchlist}
-          watchlistGroups={Object.keys(watchlistGroups)}
-        />
+        {loading ? (
+          <div className="text-center text-white">Loading…</div>
+        ) : (
+          <>
+            <PortfolioSummary />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <Watchlist
-              groups={watchlistGroups}
-              activeGroup={activeWatchlist}
-              onGroupChange={setActiveWatchlist}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              filterSector={filterSector}
-              onFilterChange={setFilterSector}
-              showCharts={showCharts}
-              onToggleChart={toggleChart}
-              onTogglePin={togglePin}
-              onAddAlert={addAlert}
-              onRemoveAlert={removeAlert}
-              onAddGroup={addGroup}
+            <StockSearch
+              onAddToWatchlist={handleAddToWatchlist}
+              watchlistGroups={watchlists.map((w) => w.name)}
             />
-          </div>
 
-          <div className="lg:col-span-1">
-            <AlertHistory alerts={alertsData} />
-          </div>
-        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <Watchlist
+                  groups={watchlistGroups}
+                  activeGroup={activeWatchlist}
+                  onGroupChange={setActiveWatchlist}
+                  onAddGroup={handleAddGroup}
+                  onDeleteGroup={handleDeleteGroup}
+                  sortBy={sortBy}
+                  onSortChange={setSortBy}
+                  filterSector={filterSector}
+                  onFilterChange={setFilterSector}
+                  showCharts={showCharts}
+                  onToggleChart={toggleChart}
+                  onTogglePin={togglePin}
+                  onAddAlert={addAlert}
+                  onRemoveAlert={removeAlert}
+                />
+              </div>
+
+              <div className="lg:col-span-1">
+                <AlertHistory />
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );

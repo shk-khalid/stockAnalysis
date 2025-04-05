@@ -1,25 +1,7 @@
 import { Pin, LineChart as ChartIcon, Bell, X } from 'lucide-react';
 import { useState } from 'react';
 import { StockChart } from './stockChart';
-
-interface Alert {
-  price: number;
-  type: 'above' | 'below';
-}
-
-interface Stock {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  alerts: Alert[];
-  pinned: boolean;
-  sector: string;
-  marketCap: string;
-  shares: number;
-  avgPrice: number;
-  chartData: Array<{ day: number; price: number }>;
-}
+import { Alert, Stock } from '../types/stock';
 
 interface StockCardProps {
   stock: Stock;

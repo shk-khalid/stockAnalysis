@@ -16,7 +16,6 @@ export function LoginForm() {
   const { login, loading, isAuthenticated } = useAuth();
   const [redirecting, setRedirecting] = useState(false);
 
-
   const {
     register,
     handleSubmit,
@@ -30,28 +29,25 @@ export function LoginForm() {
   });
 
   useEffect(() => {
-    if (isAuthenticated) {
-      toast.success('Login successful! Redirecting to dashboard...');
-      setRedirecting(true);
-      const timer = setTimeout(() => {
-        navigate('/dashboard');
-        setRedirecting(false);
-      }, 2000);
-
-      return () => clearTimeout(timer); 
+    // If already authenticated, redirect immediately without showing toast
+    if (isAuthenticated && !redirecting) {
+      navigate('/dashboard');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, redirecting]);
 
   const onSubmit = async (data: LoginFormData) => {
     try {
+      setRedirecting(true);
       const result = await login(data.email, data.password);
       if (result.meta.requestStatus === 'fulfilled') {
-      } else {
-        toast.error('Login failed. Please try again.');
+        toast.success('Login successful! Redirecting to dashboard...');
+        navigate('/dashboard');
       }
     } catch (err) {
       console.error('Login failed:', err);
       toast.error('Login failed. Please try again.');
+    } finally {
+      setRedirecting(false);
     }
   };
 
@@ -78,7 +74,6 @@ export function LoginForm() {
         </p>
 
         <Card className="p-8 rounded-lg shadow-lg bg-[rgb(var(--color-oxford-blue))] text-white">
-          {/* Removed the error display block */}
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
             <Input
               label="Email address"

@@ -1,24 +1,7 @@
 import { WatchlistHeader } from './watchListHeader';
 import { StockCard } from './stockCard';
-
-interface Alert {
-  price: number;
-  type: 'above' | 'below';
-}
-
-interface Stock {
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  alerts: Alert[];
-  pinned: boolean;
-  sector: string;
-  marketCap: string;
-  shares: number;
-  avgPrice: number;
-  chartData: Array<{ day: number; price: number }>;
-}
+import { TrendingUp } from 'lucide-react';
+import { Alert, Stock } from '../types/stock';
 
 interface WatchlistProps {
   groups: { [key: string]: Stock[] };
@@ -34,6 +17,7 @@ interface WatchlistProps {
   onAddAlert: (symbol: string, alert: Alert) => void;
   onRemoveAlert: (symbol: string, alertIndex: number) => void;
   onAddGroup: (name: string) => void;
+  onDeleteGroup: (name: string) => void;
 }
 
 export function Watchlist({
@@ -50,6 +34,7 @@ export function Watchlist({
   onAddAlert,
   onRemoveAlert,
   onAddGroup,
+  onDeleteGroup,
 }: WatchlistProps) {
   const sortStocks = (stocks: Stock[]) => {
     return [...stocks].sort((a, b) => {
@@ -88,12 +73,16 @@ export function Watchlist({
           filterSector={filterSector}
           onFilterChange={onFilterChange}
           onAddGroup={onAddGroup}
+          onDeleteGroup={onDeleteGroup}
         />
-        
+
         {stocks.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-400">No stocks found in this watchlist.</p>
-            <p className="text-sm text-gray-500 mt-2">Try adjusting your filters or add some stocks.</p>
+          <div className="h-64 flex items-center justify-center bg-[rgb(var(--color-rich-black))]/50 rounded-lg border border-[rgb(var(--color-yale-blue))]">
+            <div className="text-center">
+              <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-300 font-medium">No stocks to display</p>
+              <p className="text-sm text-gray-400 mt-1">Your watchlist is empty or no stocks match the selected filters</p>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

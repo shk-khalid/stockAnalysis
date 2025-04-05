@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DollarSign, TrendingUp, Calendar, TrendingDown } from 'lucide-react';
-import { getWatchlistOverview, WatchlistOverview } from '../../services/stockService';
+import { getWatchlistOverview } from '../../services/stockService';
+import { WatchlistOverview } from '../types/stock';
 import { format } from 'date-fns';
 import { Loading } from '../common/loading';
 
