@@ -4,25 +4,20 @@ import { DollarSign, TrendingUp, Calendar, TrendingDown } from 'lucide-react';
 import { getWatchlistOverview } from '../../services/stockService';
 import { WatchlistOverview } from '../types/stock';
 import { format } from 'date-fns';
-import { Loading } from '../common/loading';
 
 export function PortfolioSummary() {
   const [overview, setOverview] = useState<WatchlistOverview | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchOverview = async () => {
       try {
-        setIsLoading(true);
         const data = await getWatchlistOverview();
         setOverview(data);
         setError(null);
       } catch (err) {
         setError('Failed to fetch portfolio data');
         console.error('Error fetching portfolio overview:', err);
-      } finally {
-        setIsLoading(false);
       }
     };
 
@@ -58,14 +53,39 @@ export function PortfolioSummary() {
   const overallTotalValue = overview?.overallTotalValue ?? 0;
   const overallTotalGainLoss = overview?.overallTotalGainLoss ?? 0;
 
-  if (isLoading) {
-    return <Loading fullScreen />;
-  }
-
-  if (error) {
+  /* if (error) {
     return (
       <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-8">
         <p className="text-red-400">{error}</p>
+      </div>
+    );
+  } */
+
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="flex items-start gap-3 bg-red-50 border border-red-400 rounded-lg p-4 mb-8"
+      >
+        <svg
+          className="w-6 h-6 text-red-500 flex-shrink-0"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"
+          />
+        </svg>
+        <div>
+          <h3 className="text-red-800 font-bold mb-1">Error</h3>
+          <p className="text-red-700">{error}</p>
+        </div>
       </div>
     );
   }
@@ -113,12 +133,12 @@ export function PortfolioSummary() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgb(var(--color-oxford-blue))" />
-                <XAxis 
-                  dataKey="date" 
+                <XAxis
+                  dataKey="date"
                   stroke="#9ca3af"
                   tick={{ fill: '#9ca3af' }}
                 />
-                <YAxis 
+                <YAxis
                   stroke="#9ca3af"
                   tick={{ fill: '#9ca3af' }}
                   tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
@@ -133,9 +153,9 @@ export function PortfolioSummary() {
                   itemStyle={{ color: 'rgb(var(--color-mikado-yellow))' }}
                   formatter={(value: number) => [`$${value.toLocaleString()}`, 'Portfolio Value']}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
+                <Line
+                  type="monotone"
+                  dataKey="value"
                   stroke="rgb(var(--color-mikado-yellow))"
                   strokeWidth={2}
                   dot={false}
@@ -166,7 +186,7 @@ export function PortfolioSummary() {
         {upcomingDividends.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {upcomingDividends.map((dividend) => (
-              <div 
+              <div
                 key={dividend.symbol}
                 className="bg-[rgb(var(--color-yale-blue))] rounded-lg p-4 border border-[rgb(var(--color-yale-blue))]"
               >

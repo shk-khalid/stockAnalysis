@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  createWatchlist,
-  deleteWatchlist,
-  getWatchlists,
-  getWatchlistOverview,
-} from '../services/watchlistService';
+import { createWatchlist, deleteWatchlist, getWatchlists, getWatchlistOverview } from '../services/watchlistService';
 import { Navigation } from '../components/common/navigation';
 import { PortfolioSummary } from '../components/dashboard/portfolioSummary';
 import { StockSearch } from '../components/dashboard/stockSearch';
 import { Watchlist } from '../components/dashboard/watchList';
 import { AlertHistory } from '../components/dashboard/alertHistory';
-import type { Watchlist as WLType, Stock, Alert } from '../components/types/stock';
+import type { Watchlist as WLType, Stock, Alert, SearchResult } from '../components/types/stock';
+import toast from 'react-hot-toast';
 
 export const DashboardPage: React.FC = () => {
   const [watchlists, setWatchlists] = useState<WLType[]>([]);
@@ -32,9 +28,17 @@ export const DashboardPage: React.FC = () => {
         const lists = await getWatchlists();
         setWatchlists(lists);
 
+        // build name->id map
         const map: Record<string, number> = {};
         lists.forEach((wl) => (map[wl.name] = wl.id));
         setWatchlistMap(map);
+
+        // initialize groups & active
+        const groupsInit: Record<string, Stock[]> = {};
+        lists.forEach((wl) => {
+          groupsInit[wl.name] = [];
+        });
+        setWatchlistGroups(groupsInit);
 
         if (lists.length) setActiveWatchlist(lists[0].name);
       } catch (err: any) {
@@ -76,7 +80,9 @@ export const DashboardPage: React.FC = () => {
       setWatchlistMap((prev) => ({ ...prev, [newList.name]: newList.id }));
       setWatchlistGroups((prev) => ({ ...prev, [newList.name]: [] }));
       setActiveWatchlist(newList.name);
+      toast.success(`Watchlist "${newList.name}" created`);
     } catch (err: any) {
+      toast.error(err.message || 'Failed to create watchlist');
       setError(err.message);
     }
   };
@@ -105,17 +111,50 @@ export const DashboardPage: React.FC = () => {
         const remaining = watchlists.filter((w) => w.name !== name);
         setActiveWatchlist(remaining[0]?.name || '');
       }
+      toast.success(`Watchlist "${name}" deleted`);
     } catch (err: any) {
+      toast.error(err.message || `Failed to delete "${name}"`);
       setError(err.message);
     }
   };
 
-  // 5) All your existing handlers
+  // 5) Handle adding a stock to a watchlist
+  const handleAddToWatchlist = (stock: SearchResult, watchlistId: number) => {
+    // find the watchlist name by its ID
+    const wl = watchlists.find((w) => w.id === watchlistId);
+    if (!wl) return;
+    const groupName = wl.name;
 
+    // build the Stock object
+    const newStock: Stock = {
+      ...stock,
+      symbol: stock.symbol,
+      name: stock.name,
+      price: stock.price,
+      change: stock.change,
+      marketCap: stock.marketCap,
+      alerts: [],
+      pinned: false,
+      sector: 'Technology',
+      shares: 0,
+      avgPrice: stock.price,
+      chartData: Array.from({ length: 7 }, (_, i) => ({
+        date: i + 1,
+        price: stock.price + (Math.random() - 0.5) * 10,
+      })),
+    };
+
+    // insert into the correct group
+    setWatchlistGroups((prev) => ({
+      ...prev,
+      [groupName]: [...(prev[groupName] || []), newStock],
+    }));
+  };
+
+  // Other handlers…
   const toggleChart = (symbol: string) => {
     setShowCharts((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   };
-
   const togglePin = (symbol: string) => {
     setWatchlistGroups((prev) => {
       const updated = (prev[activeWatchlist] || []).map((stock) =>
@@ -124,7 +163,6 @@ export const DashboardPage: React.FC = () => {
       return { ...prev, [activeWatchlist]: updated };
     });
   };
-
   const addAlert = (symbol: string, alert: Alert) => {
     setWatchlistGroups((prev) => {
       const updated = (prev[activeWatchlist] || []).map((stock) =>
@@ -133,7 +171,6 @@ export const DashboardPage: React.FC = () => {
       return { ...prev, [activeWatchlist]: updated };
     });
   };
-
   const removeAlert = (symbol: string, alertIndex: number) => {
     setWatchlistGroups((prev) => {
       const updated = (prev[activeWatchlist] || []).map((stock) =>
@@ -143,29 +180,6 @@ export const DashboardPage: React.FC = () => {
       );
       return { ...prev, [activeWatchlist]: updated };
     });
-  };
-
-  const handleAddToWatchlist = (
-    stock: Omit<Stock, 'alerts' | 'pinned' | 'shares' | 'avgPrice' | 'chartData'> & { price: number },
-    group: string
-  ) => {
-    const newStock: Stock = {
-      ...stock,
-      alerts: [],
-      pinned: false,
-      sector: 'Technology',
-      marketCap: 'Large',
-      shares: 0,
-      avgPrice: stock.price,
-      chartData: Array.from({ length: 7 }, (_, i) => ({
-        date: i + 1,
-        price: stock.price + (Math.random() - 0.5) * 10,
-      })),
-    };
-    setWatchlistGroups((prev) => ({
-      ...prev,
-      [group]: [...(prev[group] || []), newStock],
-    }));
   };
 
   return (
@@ -185,9 +199,10 @@ export const DashboardPage: React.FC = () => {
           <>
             <PortfolioSummary />
 
+            {/* Pass the full watchlists array, not just names */}
             <StockSearch
               onAddToWatchlist={handleAddToWatchlist}
-              watchlistGroups={watchlists.map((w) => w.name)}
+              watchlistGroups={watchlists}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

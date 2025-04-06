@@ -11,7 +11,7 @@ export interface Stock {
     alerts: Alert[];
     pinned: boolean;
     sector: string;
-    marketCap: string;
+    marketCap?: number;
     shares: number;
     avgPrice: number;
     chartData: Array<{ date: number; price: number }>;

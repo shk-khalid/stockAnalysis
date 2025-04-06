@@ -2,6 +2,17 @@ import api from './api';
 import axios from 'axios';
 import { Stock, Watchlist } from '../components/types/stock';
 
+export interface AddToWatchlistPayload {
+  symbol: string;
+  shares: number;
+  purchasePrice: number;
+}
+
+export interface WatchlistResponse {
+  message: string;
+  stock: Stock;
+}
+
 export async function createWatchlist(name: string): Promise<Watchlist> {
   try {
     const response = await api.post<Watchlist>('/watchlists/add/', { name });
@@ -37,5 +48,23 @@ export async function getWatchlistOverview(watchlistId: number): Promise<Stock[]
       throw new Error('Watchlist not found');
     }
     throw new Error('Failed to fetch watchlist overview');
+  }
+}
+
+export async function addToWatchlist(
+  watchlistId: number,
+  data: AddToWatchlistPayload
+): Promise<WatchlistResponse> {
+  try {
+    const response = await api.post<WatchlistResponse>(
+      `/watchlists/${watchlistId}/add-stock/`,
+      data
+    );
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      throw new Error(error.response.data.error || 'Failed to add stock to watchlist');
+    }
+    throw new Error('An unexpected error occurred while adding to watchlist');
   }
 }
