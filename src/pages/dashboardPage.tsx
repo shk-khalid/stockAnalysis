@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { createWatchlist, deleteWatchlist, getWatchlists, getWatchlistOverview } from '../services/watchlistService';
+import { createWatchlist, deleteWatchlist, getWatchlists, getWatchlistOverview, createAlert, deleteAlert } from '../services/watchlistService';
 import { Navigation } from '../components/common/navigation';
 import { PortfolioSummary } from '../components/dashboard/portfolioSummary';
 import { StockSearch } from '../components/dashboard/stockSearch';
 import { Watchlist } from '../components/dashboard/watchList';
 import { AlertHistory } from '../components/dashboard/alertHistory';
-import type { Watchlist as WLType, Stock, Alert, SearchResult } from '../components/types/stock';
+import type { Watchlist as WLType, Stock, SearchResult } from '../components/types/stock';
 import toast from 'react-hot-toast';
+import { CreateAlertPayload } from '../services/watchlistService';
 
 export const DashboardPage: React.FC = () => {
   const [watchlists, setWatchlists] = useState<WLType[]>([]);
@@ -128,6 +129,7 @@ export const DashboardPage: React.FC = () => {
     // build the Stock object
     const newStock: Stock = {
       ...stock,
+      id: stock.id,
       symbol: stock.symbol,
       name: stock.name,
       price: stock.price,
@@ -151,6 +153,77 @@ export const DashboardPage: React.FC = () => {
     }));
   };
 
+  // 6) Handle adding an alert to a stock
+  const handleAddAlert = async (symbol: string, alertData: { price: number; type: 'above' | 'below' }) => {
+    try {
+      // Find the stock in the current group
+      const stock = watchlistGroups[activeWatchlist].find(s => s.symbol === symbol);
+      if (!stock) {
+        throw new Error('Stock not found');
+      }
+
+      const payload: CreateAlertPayload = {
+        symbol: symbol,                // Added: symbol field
+        type: alertData.type,          // 'above' or 'below'
+        triggerPrice: alertData.price, // Added: triggerPrice field
+        message: `${symbol} price ${alertData.type === 'above' ? 'increased above' : 'decreased below'} $${alertData.price}`,
+        severity: 'high'
+      };
+
+      // Pass stock.id (assumed to be a number) to createAlert
+      const newAlert = await createAlert(stock.id, payload);
+
+      setWatchlistGroups(prevGroups => ({
+        ...prevGroups,
+        [activeWatchlist]: prevGroups[activeWatchlist].map(s =>
+          s.symbol === symbol ? {
+            ...s,
+            alerts: [...s.alerts, newAlert]
+          } : s
+        )
+      }));
+
+      setError(null);
+    } catch (err) {
+      setError('Failed to create alert. Please try again.');
+      console.error('Error creating alert:', err);
+    }
+  };
+
+  // 7) Handle removing an alert from a stock
+  const handleRemoveAlert = async (symbol: string, alertIndex: number) => {
+    try {
+      const stock = watchlistGroups[activeWatchlist].find(s => s.symbol === symbol);
+      if (!stock) {
+        throw new Error('Stock not found');
+      }
+
+      const alert = stock.alerts[alertIndex];
+      if (!alert) {
+        throw new Error('Alert not found');
+      }
+
+      await deleteAlert(alert.id);
+
+      setWatchlistGroups(prevGroups => ({
+        ...prevGroups,
+        [activeWatchlist]: prevGroups[activeWatchlist].map(s =>
+          s.symbol === symbol ? {
+            ...s,
+            alerts: s.alerts.filter((_, index) => index !== alertIndex)
+          } : s
+        )
+      }));
+
+      setError(null);
+    } catch (err) {
+      setError('Failed to delete alert. Please try again.');
+      console.error('Error deleting alert:', err);
+    }
+  };
+
+
+
   // Other handlers…
   const toggleChart = (symbol: string) => {
     setShowCharts((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
@@ -159,24 +232,6 @@ export const DashboardPage: React.FC = () => {
     setWatchlistGroups((prev) => {
       const updated = (prev[activeWatchlist] || []).map((stock) =>
         stock.symbol === symbol ? { ...stock, pinned: !stock.pinned } : stock
-      );
-      return { ...prev, [activeWatchlist]: updated };
-    });
-  };
-  const addAlert = (symbol: string, alert: Alert) => {
-    setWatchlistGroups((prev) => {
-      const updated = (prev[activeWatchlist] || []).map((stock) =>
-        stock.symbol === symbol ? { ...stock, alerts: [...stock.alerts, alert] } : stock
-      );
-      return { ...prev, [activeWatchlist]: updated };
-    });
-  };
-  const removeAlert = (symbol: string, alertIndex: number) => {
-    setWatchlistGroups((prev) => {
-      const updated = (prev[activeWatchlist] || []).map((stock) =>
-        stock.symbol === symbol
-          ? { ...stock, alerts: stock.alerts.filter((_, i) => i !== alertIndex) }
-          : stock
       );
       return { ...prev, [activeWatchlist]: updated };
     });
@@ -220,8 +275,8 @@ export const DashboardPage: React.FC = () => {
                   showCharts={showCharts}
                   onToggleChart={toggleChart}
                   onTogglePin={togglePin}
-                  onAddAlert={addAlert}
-                  onRemoveAlert={removeAlert}
+                  onAddAlert={handleAddAlert}
+                  onRemoveAlert={handleRemoveAlert}
                 />
               </div>
 

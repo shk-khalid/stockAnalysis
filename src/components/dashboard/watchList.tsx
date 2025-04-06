@@ -1,7 +1,7 @@
 import { WatchlistHeader } from './watchListHeader';
 import { StockCard } from './stockCard';
 import { TrendingUp } from 'lucide-react';
-import { Alert, Stock } from '../types/stock';
+import { Stock } from '../types/stock';
 
 interface WatchlistProps {
   groups: { [key: string]: Stock[] };
@@ -14,8 +14,8 @@ interface WatchlistProps {
   showCharts: { [key: string]: boolean };
   onToggleChart: (symbol: string) => void;
   onTogglePin: (symbol: string) => void;
-  onAddAlert: (symbol: string, alert: Alert) => void;
-  onRemoveAlert: (symbol: string, alertIndex: number) => void;
+  onAddAlert: (symbol: string, alertData: { price: number; type: 'above' | 'below' }) => Promise<void>;
+  onRemoveAlert: (symbol: string, alertIndex: number) => Promise<void>;
   onAddGroup: (name: string) => void;
   onDeleteGroup: (name: string) => void;
 }

@@ -1,14 +1,14 @@
-import { Pin, LineChart as ChartIcon, Bell, X } from 'lucide-react';
+import { Pin, LineChart as ChartIcon, Bell, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { useState } from 'react';
 import { StockChart } from './stockChart';
-import { Alert, Stock } from '../types/stock';
+import { Stock } from '../types/stock';
 
 interface StockCardProps {
   stock: Stock;
   showChart: boolean;
   onToggleChart: () => void;
   onTogglePin: () => void;
-  onAddAlert: (symbol: string, alert: Alert) => void;
+  onAddAlert: (symbol: string, alert: { price: number; type: 'above' | 'below' }) => void;
   onRemoveAlert: (symbol: string, alertIndex: number) => void;
 }
 
@@ -138,8 +138,13 @@ export function StockCard({
               key={index}
               className="flex items-center space-x-2 px-2 py-1 rounded bg-[rgb(var(--color-yale-blue))] text-sm"
             >
-              <span className="text-[rgb(var(--color-mikado-yellow))]">
-                {alert.type === 'above' ? '↑' : '↓'} ${alert.price}
+              <span className="flex items-center text-[rgb(var(--color-mikado-yellow))]">
+                {alert.type === "above" ? (
+                  <ArrowUp className="w-4 h-4 text-green-500" />
+                ) : (
+                  <ArrowDown className="w-4 h-4 text-red-500" />
+                )}
+                <span className="ml-1">${alert.triggerPrice}</span>
               </span>
               <button
                 onClick={() => onRemoveAlert(stock.symbol, index)}

@@ -1,9 +1,17 @@
 export interface Alert {
-    price: number;
-    type: 'above' | 'below';
+    id: number;
+    stock: number;
+    symbol: string;
+    type: string;
+    message: string;
+    severity: string;
+    timestamp: string;
+    triggerPrice: number;
+    triggered: boolean;
 }
 
 export interface Stock {
+    id: number;
     symbol: string;
     name: string;
     price: number;
@@ -22,7 +30,7 @@ export interface Watchlist {
     name: string;
     user: number;
     created_at: string;
-  }
+}
 
 export interface HistoricalData {
     date: number;
@@ -48,6 +56,7 @@ export interface WatchlistOverview {
 }
 
 export interface SearchResult {
+    id: number;
     symbol: string;
     name: string;
     price: number;
