@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { createWatchlist, deleteWatchlist, getWatchlists, getWatchlistOverview, createAlert, deleteAlert } from '../services/watchlistService';
+import { createWatchlist, deleteWatchlist, getWatchlists, getWatchlistOverview, createAlert, deleteAlert, toggleStockPin } from '../services/watchlistService';
 import { Navigation } from '../components/common/navigation';
 import { PortfolioSummary } from '../components/dashboard/portfolioSummary';
 import { StockSearch } from '../components/dashboard/stockSearch';
@@ -8,6 +8,7 @@ import { AlertHistory } from '../components/dashboard/alertHistory';
 import type { Watchlist as WLType, Stock, SearchResult } from '../components/types/stock';
 import toast from 'react-hot-toast';
 import { CreateAlertPayload } from '../services/watchlistService';
+import { Loading } from '../components/common/loading';
 
 export const DashboardPage: React.FC = () => {
   const [watchlists, setWatchlists] = useState<WLType[]>([]);
@@ -15,7 +16,6 @@ export const DashboardPage: React.FC = () => {
   const [watchlistGroups, setWatchlistGroups] = useState<Record<string, Stock[]>>({});
   const [activeWatchlist, setActiveWatchlist] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>('symbol');
   const [filterSector, setFilterSector] = useState<string>('all');
   const [showCharts, setShowCharts] = useState<Record<string, boolean>>({});
@@ -24,7 +24,6 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     async function loadLists() {
       setLoading(true);
-      setError(null);
       try {
         const lists = await getWatchlists();
         setWatchlists(lists);
@@ -43,7 +42,7 @@ export const DashboardPage: React.FC = () => {
 
         if (lists.length) setActiveWatchlist(lists[0].name);
       } catch (err: any) {
-        setError(err.message);
+        console.error(err.message);
       } finally {
         setLoading(false);
       }
@@ -58,7 +57,6 @@ export const DashboardPage: React.FC = () => {
     if (id == null) return;
 
     async function loadOverview() {
-      setError(null);
       try {
         const stocks = await getWatchlistOverview(id);
         setWatchlistGroups((prev) => ({
@@ -66,7 +64,7 @@ export const DashboardPage: React.FC = () => {
           [activeWatchlist]: stocks,
         }));
       } catch (err: any) {
-        setError(err.message);
+        console.error(err.message);
       }
     }
     loadOverview();
@@ -74,7 +72,6 @@ export const DashboardPage: React.FC = () => {
 
   // 3) Create a new watchlist
   const handleAddGroup = async (name: string) => {
-    setError(null);
     try {
       const newList = await createWatchlist(name);
       setWatchlists((prev) => [...prev, newList]);
@@ -84,7 +81,7 @@ export const DashboardPage: React.FC = () => {
       toast.success(`Watchlist "${newList.name}" created`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to create watchlist');
-      setError(err.message);
+      console.error(err.message);
     }
   };
 
@@ -94,7 +91,6 @@ export const DashboardPage: React.FC = () => {
     if (id == null) return;
     if (!window.confirm(`Delete watchlist "${name}"?`)) return;
 
-    setError(null);
     try {
       await deleteWatchlist(id);
       setWatchlists((prev) => prev.filter((w) => w.name !== name));
@@ -115,7 +111,7 @@ export const DashboardPage: React.FC = () => {
       toast.success(`Watchlist "${name}" deleted`);
     } catch (err: any) {
       toast.error(err.message || `Failed to delete "${name}"`);
-      setError(err.message);
+      console.error(err.message);
     }
   };
 
@@ -183,9 +179,8 @@ export const DashboardPage: React.FC = () => {
         )
       }));
 
-      setError(null);
     } catch (err) {
-      setError('Failed to create alert. Please try again.');
+      toast.error('Failed to create alert. Please try again.');
       console.error('Error creating alert:', err);
     }
   };
@@ -215,41 +210,80 @@ export const DashboardPage: React.FC = () => {
         )
       }));
 
-      setError(null);
     } catch (err) {
-      setError('Failed to delete alert. Please try again.');
+      toast.error('Failed to delete alert. Please try again.');
       console.error('Error deleting alert:', err);
     }
   };
 
+  // 8) Handle toggling of stock pinned status
+  const togglePin = async (symbol: string) => {
+    try {
+      const watchlistId = watchlistMap[activeWatchlist];
+      if (watchlistId == null) {
+        throw new Error('Active watchlist not found');
+      }
 
+      const currentStock = watchlistGroups[activeWatchlist].find(s => s.symbol === symbol);
+      if (!currentStock) {
+        throw new Error('Stock not found');
+      }
 
-  // Other handlers…
+      // Store the current pin status before making any changes
+      const currentPinStatus = currentStock.pinned;
+
+      // Optimistically update UI
+      setWatchlistGroups(prevGroups => ({
+        ...prevGroups,
+        [activeWatchlist]: prevGroups[activeWatchlist].map(s =>
+          s.symbol === symbol ? { ...s, pinned: !currentPinStatus } : s
+        )
+      }));
+
+      const updatedStock = await toggleStockPin(watchlistId, currentStock.id);
+
+      setWatchlistGroups(prevGroups => ({
+        ...prevGroups,
+        [activeWatchlist]: prevGroups[activeWatchlist].map(s =>
+          s.symbol === symbol ? { ...s, pinned: updatedStock.pinned } : s
+        )
+      }));
+
+      const action = updatedStock.pinned ? 'pinned to' : 'unpinned from';
+      toast.success(`${symbol} ${action} ${activeWatchlist}`);
+
+    } catch (err: any) {
+      // Revert to the original pin status
+      const currentStock = watchlistGroups[activeWatchlist].find(s => s.symbol === symbol);
+      if (currentStock) {
+        setWatchlistGroups(prevGroups => ({
+          ...prevGroups,
+          [activeWatchlist]: prevGroups[activeWatchlist].map(s =>
+            s.symbol === symbol ? { ...s, pinned: currentStock.pinned } : s
+          )
+        }));
+      }
+
+      const errorMsg = err.message || 'Failed to update pin status';
+      toast.error(errorMsg);
+      console.error(errorMsg);
+    }
+  };
+
+  // 9) Handle toggling of chart visibility
   const toggleChart = (symbol: string) => {
     setShowCharts((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   };
-  const togglePin = (symbol: string) => {
-    setWatchlistGroups((prev) => {
-      const updated = (prev[activeWatchlist] || []).map((stock) =>
-        stock.symbol === symbol ? { ...stock, pinned: !stock.pinned } : stock
-      );
-      return { ...prev, [activeWatchlist]: updated };
-    });
-  };
+  
 
   return (
     <div className="min-h-screen bg-rich-black">
       <Navigation />
 
       <main className="w-full px-4 pt-16 sm:px-6 lg:px-8 py-8">
-        {error && (
-          <div className="mb-4 p-3 bg-red-800 text-white rounded">
-            {error}
-          </div>
-        )}
 
         {loading ? (
-          <div className="text-center text-white">Loading…</div>
+        <Loading fullScreen/>
         ) : (
           <>
             <PortfolioSummary />

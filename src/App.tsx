@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, memo } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/landingPage';
 import { LoginForm } from './components/auth/loginForm';
@@ -10,46 +10,45 @@ import { Toaster } from 'react-hot-toast';
 import { sessionService } from './services/sessionService';
 
 // Protected Route wrapper component
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = memo(({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, loading, initialized } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  if (!initialized || loading) {
     return <Loading fullScreen />;
   }
 
   if (!isAuthenticated) {
-    // Redirect to login page but save the attempted URL
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
-}
+});
+
+ProtectedRoute.displayName = 'ProtectedRoute';
 
 function App() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, initialized } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Initialize session management when user is authenticated
-      sessionService.init();
+    if (!initialized) return;
 
-      // Cleanup on unmount
+    if (isAuthenticated) {
+      sessionService.init();
       return () => {
         sessionService.cleanup();
       };
     } else {
-      // If not authenticated and not already on login or register page, redirect to login
       const publicPaths = ['/', '/login', '/register'];
       if (!publicPaths.includes(location.pathname)) {
         navigate('/login');
       }
     }
-  }, [isAuthenticated, navigate, location]);
+  }, [isAuthenticated, initialized, navigate, location.pathname]);
 
-  if (loading) {
+  if (!initialized || loading) {
     return <Loading fullScreen />;
   }
 

@@ -50,7 +50,7 @@ export function RegisterForm() {
   };
 
   if (loading) {
-    return <Loading fullScreen />;
+    return <Loading size={10} margin={3} color="#FFD700" fullScreen />;
   }
 
   return (
@@ -140,7 +140,7 @@ export function RegisterForm() {
               <Link to="/login">
                 <Button
                   variant="outline"
-                  className="w-full border-[rgb(var(--color-mikado-yellow))] text-[rgb(var(--color-mikado-yellow))] hover:bg-[rgb(var(--color-mikado-yellow))]/10 focus:ring-2 focus:ring-[rgb(var(--color-gold))] transition-colors duration-300"
+                  className="w-full border-[rgb(var(--color-mikado-yellow))] text-[rgb(var(--color-mikado-yellow))] hover:bg-[rgb(var(--color-mikado-yellow))]/90 hover:text-white focus:ring-2 focus:ring-[rgb(var(--color-gold))] transition-colors duration-300"
                 >
                   Sign in instead
                 </Button>

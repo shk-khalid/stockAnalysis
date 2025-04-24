@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp, Calendar, TrendingDown } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, TrendingDown, AlertTriangle} from 'lucide-react';
 import { getWatchlistOverview } from '../../services/stockService';
 import { WatchlistOverview } from '../types/stock';
 import { format } from 'date-fns';
@@ -53,42 +53,18 @@ export function PortfolioSummary() {
   const overallTotalValue = overview?.overallTotalValue ?? 0;
   const overallTotalGainLoss = overview?.overallTotalGainLoss ?? 0;
 
-  /* if (error) {
-    return (
-      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-8">
-        <p className="text-red-400">{error}</p>
-      </div>
-    );
-  } */
-
-  if (error) {
-    return (
-      <div
-        role="alert"
-        className="flex items-start gap-3 bg-red-50 border border-red-400 rounded-lg p-4 mb-8"
-      >
-        <svg
-          className="w-6 h-6 text-red-500 flex-shrink-0"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"
-          />
-        </svg>
-        <div>
-          <h3 className="text-red-800 font-bold mb-1">Error</h3>
-          <p className="text-red-700">{error}</p>
+    if (error) {
+      return (
+        <div className="h-64 flex items-center justify-center bg-[rgb(var(--color-yale-blue))]/50 rounded-lg border border-[rgb(var(--color-yale-blue))] mb-8">
+          <div className="text-center">
+            <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-3" />
+            <p className="text-red-300 font-medium">Unable to load portfolio</p>
+            <p className="text-sm text-red-400 mt-1">{error}</p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      );
+    }
+    
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">

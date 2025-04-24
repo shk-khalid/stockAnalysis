@@ -1,70 +1,70 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { jwtDecode } from 'jwt-decode';
-import { authService } from '../../services/authService';
 import type { User, AuthTokens, AuthResponse } from '../../components/types/auth';
+import { authService } from '../../services/authService';
 
 interface AuthState {
   user: User | null;
   tokens: AuthTokens | null;
   loading: boolean;
   error: string | null;
+  initialized: boolean;
 }
 
 const TOKEN_KEY = 'auth_tokens';
+const USER_KEY = 'auth_user';
 
-const initialState: AuthState = {
-  // When the app loads, try to get tokens from localStorage.
-  tokens: JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null'),
-  // If tokens exist, attempt to decode the access token to set the current user.
-  user: null,
-  loading: false,
-  error: null,
-};
-
-// Helper type for the JWT payload.
-// Adjust the fields based on your JWT payload.
 interface JwtPayload {
   exp: number;
-  user_id: number;
+  user_id: string;
   email?: string;
   name?: string;
 }
 
-/**
- * Decodes the access token (if available) from localStorage and returns a User object.
- * Returns null if no valid token is found or if the token is expired.
- */
-export const getCurrentUser = (): User | null => {
-  const tokensStr = localStorage.getItem(TOKEN_KEY);
-  if (!tokensStr) return null;
+const validateAndDecodeToken = (token: string): JwtPayload | null => {
   try {
-    const tokens: AuthTokens = JSON.parse(tokensStr);
-    if (!tokens.access) return null;
-    const decoded = jwtDecode<JwtPayload>(tokens.access);
+    const decoded = jwtDecode<JwtPayload>(token);
     const currentTime = Date.now() / 1000;
-    if (decoded.exp < currentTime) {
-      return null;
-    }
-    // Build and return the user object.
-    const user: User = {
-      id: String(decoded.user_id), // Convert number to string if necessary
-      email: decoded.email || '',
-      name: decoded.name || '',
-    };
-    return user;
-  } catch (error) {
-    console.error('Error decoding access token:', error);
+    return decoded.exp > currentTime ? decoded : null;
+  } catch {
     return null;
   }
 };
 
-/**
- * Returns true if a valid current user exists.
- */
-export const isAuthenticated = (): boolean => {
-  return getCurrentUser() !== null;
+const getStoredTokens = (): AuthTokens | null => {
+  try {
+    const tokens = localStorage.getItem(TOKEN_KEY);
+    if (!tokens) return null;
+    const parsed = JSON.parse(tokens);
+    return validateAndDecodeToken(parsed.access) ? parsed : null;
+  } catch {
+    return null;
+  }
 };
+
+const getStoredUser = (): User | null => {
+  try {
+    const user = localStorage.getItem(USER_KEY);
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const initAuth = createAsyncThunk(
+  'auth/init',
+  async (_, { rejectWithValue }) => {
+    const tokens = getStoredTokens();
+    const user = getStoredUser();
+
+    if (!tokens || !user) {
+      return rejectWithValue('No valid session found');
+    }
+
+    return { tokens, user };
+  }
+);
 
 export const login = createAsyncThunk(
   'auth/login',
@@ -87,11 +87,11 @@ export const logout = createAsyncThunk(
   async (_, { getState, rejectWithValue }) => {
     try {
       const state = getState() as { auth: AuthState };
-      const refreshToken = state.auth.tokens?.refresh;
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
+      if (state.auth.tokens?.refresh) {
+        await authService.logout(state.auth.tokens.refresh);
       }
-      await authService.logout(refreshToken);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
       return true;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.detail || 'Logout failed');
@@ -99,21 +99,48 @@ export const logout = createAsyncThunk(
   }
 );
 
+const initialState: AuthState = {
+  user: null,
+  tokens: null,
+  loading: false,
+  error: null,
+  initialized: false
+};
+
 const authSlice = createSlice({
   name: 'auth',
-  initialState: {
-    ...initialState,
-    // On load, try to set the current user from the token.
-    user: getCurrentUser(),
-  },
+  initialState,
   reducers: {
     clearError: (state) => {
       state.error = null;
     },
+    clearAuth: (state) => {
+      state.user = null;
+      state.tokens = null;
+      state.error = null;
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    },
   },
   extraReducers: (builder) => {
-    // Login
     builder
+      .addCase(initAuth.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(initAuth.fulfilled, (state, action) => {
+        state.loading = false;
+        state.initialized = true;
+        state.user = action.payload.user;
+        state.tokens = action.payload.tokens;
+      })
+      .addCase(initAuth.rejected, (state) => {
+        state.loading = false;
+        state.initialized = true;
+        state.user = null;
+        state.tokens = null;
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+      })
       .addCase(login.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -126,12 +153,12 @@ const authSlice = createSlice({
           refresh: action.payload.refresh,
         };
         localStorage.setItem(TOKEN_KEY, JSON.stringify(state.tokens));
+        localStorage.setItem(USER_KEY, JSON.stringify(state.user));
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Login failed';
       })
-      // Register
       .addCase(register.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -143,23 +170,23 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = action.error.message || 'Registration failed';
       })
-      // Logout
       .addCase(logout.pending, (state) => {
         state.loading = true;
-        state.error = null;
       })
       .addCase(logout.fulfilled, (state) => {
         state.loading = false;
         state.user = null;
         state.tokens = null;
-        localStorage.removeItem(TOKEN_KEY);
+        state.error = null;
       })
       .addCase(logout.rejected, (state, action) => {
         state.loading = false;
         state.error = (action.payload as string) || 'Logout failed';
+        state.user = null;
+        state.tokens = null;
       });
   },
 });
 
-export const { clearError } = authSlice.actions;
+export const { clearError, clearAuth } = authSlice.actions;
 export default authSlice.reducer;

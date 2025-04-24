@@ -21,6 +21,19 @@ export interface CreateAlertPayload {
   severity?: 'high' | 'medium' | 'low';
 }
 
+interface PinResponse {
+  message: string;
+  stock: {
+    id: number;
+    symbol: string;
+    name: string;
+    is_pinned: boolean;
+    shares: number;
+    sector: string;
+    avgPrice: string;
+  };
+}
+
 export async function createWatchlist(name: string): Promise<Watchlist> {
   try {
     const response = await api.post<Watchlist>('/watchlists/add/', { name });
@@ -102,5 +115,25 @@ export async function deleteAlert(alertId: number): Promise<void> {
       throw new Error('Alert not found');
     }
     throw new Error('Failed to delete alert');
+  }
+}
+
+export async function toggleStockPin(watchlistId: number, stockId: number): Promise<{ pinned: boolean }> {
+  try {
+    const response = await api.post<PinResponse>(
+      `/watchlists/${watchlistId}/stocks/${stockId}/toggle-pin/`
+    );
+    
+    return { pinned: response.data.stock.is_pinned };
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 404) {
+        throw new Error('Watchlist or stock not found');
+      }
+      if (error.response?.status === 400) {
+        throw new Error('Stock is not in this watchlist');
+      }
+    }
+    throw new Error('Failed to toggle stock pin status');
   }
 }

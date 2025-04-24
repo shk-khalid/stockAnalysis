@@ -52,7 +52,7 @@ export function LoginForm() {
   };
 
   if (loading || redirecting) {
-    return <Loading fullScreen />;
+    return <Loading size={10} margin={3} color="#FFD700" fullScreen />;
   }
 
   return (
@@ -121,7 +121,7 @@ export function LoginForm() {
                 <Button
                   variant="outline"
                   fullWidth
-                  className="border-[rgb(var(--color-mikado-yellow))] text-[rgb(var(--color-mikado-yellow))] hover:bg-[rgb(var(--color-mikado-yellow))]/10 focus:ring-2 focus:ring-[rgb(var(--color-gold))] transition-colors duration-300"
+                  className="border-[rgb(var(--color-mikado-yellow))] text-[rgb(var(--color-mikado-yellow))] hover:bg-[rgb(var(--color-mikado-yellow))]/90 hover:text-white focus:ring-2 focus:ring-[rgb(var(--color-gold))] transition-colors duration-300"
                 >
                   Create new account
                 </Button>
