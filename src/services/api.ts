@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_URL = process.env.BACKEND_URL || 'http://127.0.0.1:8000/';
+const API_URL = 'https://stock-analysis-web.onrender.com';
 
 const api = axios.create({
   baseURL: API_URL,
