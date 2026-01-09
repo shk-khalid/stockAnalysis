@@ -1,0 +1,10 @@
+export { Navbar } from './Navbar';
+export { Hero } from './Hero';
+export { Stats } from './Stats';
+export { Comparison } from './Comparison';
+export { FeaturesGrid } from './FeaturesGrid';
+export { DataSources } from './DataSources';
+export { TechStack } from './TechStack';
+export { BeginnerSection } from './BeginnerSection';
+export { Features } from './Features';
+export { Footer } from './Footer';

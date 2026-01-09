@@ -1,6 +1,6 @@
 import { useEffect, memo } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { LandingPage } from './pages/landingPage';
+import { LandingPageV2 } from './pages/Landing_v2';
 import { LoginForm } from './components/auth/loginForm';
 import { RegisterForm } from './components/auth/registerForm';
 import { DashboardPage } from './pages/dashboardPage';
@@ -56,10 +56,10 @@ function App() {
     <div>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<LandingPageV2 />} />
         <Route path="/login" element={<LoginForm />} />
         <Route path="/register" element={<RegisterForm />} />
-        
+
         {/* Protected routes */}
         <Route
           path="/dashboard"
