@@ -53,7 +53,7 @@ function App() {
   }
 
   return (
-    <div>
+    <div className='bg-black'>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<LandingPageV2 />} />
