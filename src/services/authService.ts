@@ -1,4 +1,4 @@
-import api from './api';
+import { supabase } from '../supabaseClient';
 
 export interface RegisterData {
   name: string;
@@ -11,37 +11,34 @@ export interface LoginData {
   password: string;
 }
 
-export interface LogoutData {
-  refresh: string;
-}
-
 export const authService = {
   register: async (data: RegisterData) => {
-    const response = await api.post('/auth/register/', data);
-    return response.data;
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: data.email,
+      password: data.password,
+      options: {
+        data: {
+          name: data.name,
+        },
+      },
+    });
+
+    if (error) throw error;
+    return authData;
   },
 
   login: async (data: LoginData) => {
-    const response = await api.post('/auth/login/', data);
-    return response.data;
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
+      email: data.email,
+      password: data.password,
+    });
+
+    if (error) throw error;
+    return authData;
   },
 
-  logout: async (refreshToken: string) => {
-    try {
-      // This call sends the refresh token in the payload.
-      // The axios interceptor will automatically add the access token (if available)
-      // in the Authorization header as "Bearer <access token>".
-      const response = await api.post('/auth/logout/', { refresh: refreshToken });
-      return response.data;
-    } catch (error: any) {
-      throw error; // Ensure error is caught in your logout thunk or handling logic
-    }
+  logout: async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   },
-
-  /* Optionally, you can add methods for getting the current user:
-  getCurrentUser(): User | null {
-    const userString = sessionStorage.getItem("user");
-    return userString ? JSON.parse(userString) : store.getState().auth.user;
-  },
-  */
 };

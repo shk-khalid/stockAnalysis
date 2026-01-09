@@ -1,31 +1,32 @@
-import api from "./api";
-import { AxiosError } from "axios";
+import { supabase } from "../supabaseClient";
 import { WatchlistOverview, SearchResult } from "../components/types/stock";
-
 
 export const getWatchlistOverview = async (): Promise<WatchlistOverview> => {
   try {
-    const response = await api.get<WatchlistOverview>('/watchlist/overview/');
-    return response.data;
+    const { data, error } = await supabase.functions.invoke('stock-api', {
+      body: { action: 'overview' }
+    });
+
+    if (error) throw error;
+    return data;
   } catch (error) {
     console.error('Error fetching watchlist overview:', error);
     throw error;
   }
 };
 
-
 export class StockService {
   static async searchStocks(query: string): Promise<SearchResult> {
     try {
-      const response = await api.get('/stocks/search', {
-        params: { query }
+      const { data, error } = await supabase.functions.invoke('stock-api', {
+        body: { action: 'search', query }
       });
-      return response.data;
+
+      if (error) throw error;
+      return data;
     } catch (error) {
-      if (error instanceof AxiosError && error.response) {
-        throw new Error(error.response.data.error || 'Failed to fetch stock data');
-      }
-      throw new Error('An unexpected error occurred while searching stocks');
+      console.error('Error searching stocks:', error);
+      throw new Error('Failed to fetch stock data');
     }
   }
 }

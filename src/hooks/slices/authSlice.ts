@@ -1,8 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import type { PayloadAction } from '@reduxjs/toolkit';
-import { jwtDecode } from 'jwt-decode';
-import type { User, AuthTokens, AuthResponse } from '../../components/types/auth';
+import { supabase } from '../../supabaseClient';
 import { authService } from '../../services/authService';
+import type { User, AuthTokens } from '../../components/types/auth';
 
 interface AuthState {
   user: User | null;
@@ -12,55 +11,25 @@ interface AuthState {
   initialized: boolean;
 }
 
-const TOKEN_KEY = 'auth_tokens';
-const USER_KEY = 'auth_user';
-
-interface JwtPayload {
-  exp: number;
-  user_id: string;
-  email?: string;
-  name?: string;
-}
-
-const validateAndDecodeToken = (token: string): JwtPayload | null => {
-  try {
-    const decoded = jwtDecode<JwtPayload>(token);
-    const currentTime = Date.now() / 1000;
-    return decoded.exp > currentTime ? decoded : null;
-  } catch {
-    return null;
-  }
-};
-
-const getStoredTokens = (): AuthTokens | null => {
-  try {
-    const tokens = localStorage.getItem(TOKEN_KEY);
-    if (!tokens) return null;
-    const parsed = JSON.parse(tokens);
-    return validateAndDecodeToken(parsed.access) ? parsed : null;
-  } catch {
-    return null;
-  }
-};
-
-const getStoredUser = (): User | null => {
-  try {
-    const user = localStorage.getItem(USER_KEY);
-    return user ? JSON.parse(user) : null;
-  } catch {
-    return null;
-  }
-};
-
 export const initAuth = createAsyncThunk(
   'auth/init',
   async (_, { rejectWithValue }) => {
-    const tokens = getStoredTokens();
-    const user = getStoredUser();
+    const { data: { session }, error } = await supabase.auth.getSession();
 
-    if (!tokens || !user) {
+    if (error || !session) {
       return rejectWithValue('No valid session found');
     }
+
+    const user: User = {
+      id: session.user.id,
+      email: session.user.email!,
+      name: session.user.user_metadata.name || '',
+    };
+
+    const tokens: AuthTokens = {
+      access: session.access_token,
+      refresh: session.refresh_token,
+    };
 
     return { tokens, user };
   }
@@ -69,32 +38,57 @@ export const initAuth = createAsyncThunk(
 export const login = createAsyncThunk(
   'auth/login',
   async ({ email, password }: { email: string; password: string }) => {
-    const response = await authService.login({ email, password });
-    return response;
+    const { user, session } = await authService.login({ email, password });
+
+    if (!user || !session) throw new Error('Login failed');
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email!,
+        name: user.user_metadata.name || '',
+      },
+      tokens: {
+        access: session.access_token,
+        refresh: session.refresh_token,
+      }
+    };
   }
 );
 
 export const register = createAsyncThunk(
   'auth/register',
   async ({ email, password, name }: { email: string; password: string; name: string }) => {
-    const response = await authService.register({ email, password, name });
-    return response;
+    const { user, session } = await authService.register({ email, password, name });
+
+    // Registration might not return a session if email confirmation is required
+    if (!user) throw new Error('Registration failed');
+
+    if (session) {
+      return {
+        user: {
+          id: user.id,
+          email: user.email!,
+          name: user.user_metadata.name || '',
+        },
+        tokens: {
+          access: session.access_token,
+          refresh: session.refresh_token,
+        }
+      };
+    }
+    return null; // Handle case where email confirmation is needed
   }
 );
 
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { getState, rejectWithValue }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      const state = getState() as { auth: AuthState };
-      if (state.auth.tokens?.refresh) {
-        await authService.logout(state.auth.tokens.refresh);
-      }
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
+      await authService.logout();
       return true;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.detail || 'Logout failed');
+      return rejectWithValue(error.message || 'Logout failed');
     }
   }
 );
@@ -118,9 +112,13 @@ const authSlice = createSlice({
       state.user = null;
       state.tokens = null;
       state.error = null;
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
     },
+    setUser: (state, action) => {
+      state.user = action.payload;
+    },
+    setSession: (state, action) => {
+      state.tokens = action.payload;
+    }
   },
   extraReducers: (builder) => {
     builder
@@ -138,22 +136,15 @@ const authSlice = createSlice({
         state.initialized = true;
         state.user = null;
         state.tokens = null;
-        localStorage.removeItem(TOKEN_KEY);
-        localStorage.removeItem(USER_KEY);
       })
       .addCase(login.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
-      .addCase(login.fulfilled, (state, action: PayloadAction<AuthResponse>) => {
+      .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.user = action.payload.user;
-        state.tokens = {
-          access: action.payload.access,
-          refresh: action.payload.refresh,
-        };
-        localStorage.setItem(TOKEN_KEY, JSON.stringify(state.tokens));
-        localStorage.setItem(USER_KEY, JSON.stringify(state.user));
+        state.tokens = action.payload.tokens;
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
@@ -163,8 +154,12 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(register.fulfilled, (state) => {
+      .addCase(register.fulfilled, (state, action) => {
         state.loading = false;
+        if (action.payload) {
+          state.user = action.payload.user;
+          state.tokens = action.payload.tokens;
+        }
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
@@ -188,5 +183,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, clearAuth } = authSlice.actions;
+export const { clearError, clearAuth, setUser, setSession } = authSlice.actions;
 export default authSlice.reducer;

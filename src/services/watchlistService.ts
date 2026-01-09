@@ -1,5 +1,4 @@
-import api from './api';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { Stock, Watchlist, Alert } from '../components/types/stock';
 
 export interface AddToWatchlistPayload {
@@ -14,126 +13,191 @@ export interface WatchlistResponse {
 }
 
 export interface CreateAlertPayload {
-  symbol: string;               // now required
+  symbol: string;
   type: 'above' | 'below';
-  triggerPrice: number;         // now required
+  triggerPrice: number;
   message?: string;
   severity?: 'high' | 'medium' | 'low';
 }
 
-interface PinResponse {
-  message: string;
-  stock: {
-    id: number;
-    symbol: string;
-    name: string;
-    is_pinned: boolean;
-    shares: number;
-    sector: string;
-    avgPrice: string;
+export async function createWatchlist(name: string): Promise<Watchlist> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('watchlists')
+    .insert({ name, user_id: user.id })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return {
+    id: data.id,
+    name: data.name,
+    user: data.user_id, // Mapping user_id to user for compatibility
+    created_at: data.created_at
   };
 }
 
-export async function createWatchlist(name: string): Promise<Watchlist> {
-  try {
-    const response = await api.post<Watchlist>('/watchlists/add/', { name });
-    return response.data;
-  } catch (error) {
-    throw new Error('Failed to create watchlist');
-  }
-}
-
 export async function deleteWatchlist(id: number): Promise<void> {
-  try {
-    await api.delete(`/watchlists/${id}/destroy/`);
-  } catch (error) {
-    throw new Error('Failed to delete watchlist');
-  }
+  const { error } = await supabase
+    .from('watchlists')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 export async function getWatchlists(): Promise<Watchlist[]> {
-  try {
-    const response = await api.get<Watchlist[]>('/watchlists/add/');
-    return response.data;
-  } catch (error) {
-    throw new Error('Failed to fetch watchlists');
-  }
+  const { data, error } = await supabase
+    .from('watchlists')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data.map(item => ({
+    id: item.id,
+    name: item.name,
+    user: item.user_id,
+    created_at: item.created_at
+  }));
 }
 
 export async function getWatchlistOverview(watchlistId: number): Promise<Stock[]> {
-  try {
-    const response = await api.get<Stock[]>(`/watchlists/${watchlistId}/overview/`);
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 404) {
-      throw new Error('Watchlist not found');
-    }
-    throw new Error('Failed to fetch watchlist overview');
+  // 1. Get stocks from DB
+  const { data: dbStocks, error } = await supabase
+    .from('watchlist_stocks')
+    .select(`
+      *,
+      alerts (*)
+    `)
+    .eq('watchlist_id', watchlistId);
+
+  if (error) throw error;
+
+  if (!dbStocks || dbStocks.length === 0) return [];
+
+  // 2. Get live prices from Edge Function
+  const symbols = dbStocks.map(s => s.symbol);
+  const { data: marketData, error: apiError } = await supabase.functions.invoke('stock-api', {
+    body: { action: 'batch-quotes', symbols }
+  });
+
+  if (apiError) {
+    console.error('Failed to fetch market data', apiError);
+    // Return DB data with stale/zero prices if API fails
+    return dbStocks.map(s => ({
+      id: s.id,
+      symbol: s.symbol,
+      name: s.name || s.symbol, // Fallback
+      price: 0,
+      change: 0,
+      alerts: s.alerts || [],
+      pinned: s.is_pinned,
+      sector: s.sector || '',
+      shares: s.shares,
+      avgPrice: s.purchase_price,
+      chartData: []
+    }));
   }
+
+  // 3. Merge data
+  return dbStocks.map(s => {
+    const quote = marketData[s.symbol] || {};
+    return {
+      id: s.id,
+      symbol: s.symbol,
+      name: s.name || quote.name || s.symbol,
+      price: quote.price || 0,
+      change: quote.change || 0,
+      alerts: s.alerts || [],
+      pinned: s.is_pinned,
+      sector: s.sector || quote.sector || '',
+      shares: s.shares,
+      avgPrice: s.purchase_price,
+      chartData: quote.chartData || []
+    };
+  });
 }
 
 export async function addToWatchlist(
   watchlistId: number,
   data: AddToWatchlistPayload
 ): Promise<WatchlistResponse> {
-  try {
-    const response = await api.post<WatchlistResponse>(
-      `/watchlists/${watchlistId}/add-stock/`,
-      data
-    );
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response) {
-      throw new Error(error.response.data.error || 'Failed to add stock to watchlist');
+  const { data: result, error } = await supabase.functions.invoke('stock-api', {
+    body: {
+      action: 'add-stock',
+      watchlistId,
+      symbol: data.symbol,
+      shares: data.shares,
+      purchasePrice: data.purchasePrice
     }
-    throw new Error('An unexpected error occurred while adding to watchlist');
+  });
+
+  if (error) {
+    console.error('Error adding stock:', error);
+    throw new Error('Failed to add stock to watchlist');
   }
+
+  return result;
 }
 
 export async function createAlert(stockId: number, alertData: CreateAlertPayload): Promise<Alert> {
-  try {
-    const response = await api.post<Alert>(`/alerts/${stockId}/add/`, alertData);
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 404) {
-        throw new Error('Stock not found');
-      }
-      if (error.response?.status === 400) {
-        throw new Error('Invalid alert data');
-      }
-    }
-    throw new Error('Failed to create alert');
-  }
+  const { data, error } = await supabase
+    .from('alerts')
+    .insert({
+      stock_id: stockId,
+      symbol: alertData.symbol,
+      type: alertData.type,
+      trigger_price: alertData.triggerPrice,
+      message: alertData.message,
+      severity: alertData.severity
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    stock: data.stock_id,
+    symbol: data.symbol,
+    type: data.type,
+    message: data.message,
+    severity: data.severity,
+    timestamp: data.created_at,
+    triggerPrice: data.trigger_price,
+    triggered: data.triggered || false
+  };
 }
 
 export async function deleteAlert(alertId: number): Promise<void> {
-  try {
-    await api.delete(`/alerts/${alertId}/delete/`);
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 404) {
-      throw new Error('Alert not found');
-    }
-    throw new Error('Failed to delete alert');
-  }
+  const { error } = await supabase
+    .from('alerts')
+    .delete()
+    .eq('id', alertId);
+
+  if (error) throw error;
 }
 
 export async function toggleStockPin(watchlistId: number, stockId: number): Promise<{ pinned: boolean }> {
-  try {
-    const response = await api.post<PinResponse>(
-      `/watchlists/${watchlistId}/stocks/${stockId}/toggle-pin/`
-    );
-    
-    return { pinned: response.data.stock.is_pinned };
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 404) {
-        throw new Error('Watchlist or stock not found');
-      }
-      if (error.response?.status === 400) {
-        throw new Error('Stock is not in this watchlist');
-      }
-    }
-    throw new Error('Failed to toggle stock pin status');
-  }
+  // First get current status
+  const { data: current, error: fetchError } = await supabase
+    .from('watchlist_stocks')
+    .select('is_pinned')
+    .eq('id', stockId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const newStatus = !current.is_pinned;
+
+  const { error } = await supabase
+    .from('watchlist_stocks')
+    .update({ is_pinned: newStatus })
+    .eq('id', stockId);
+
+  if (error) throw error;
+
+  return { pinned: newStatus };
 }
