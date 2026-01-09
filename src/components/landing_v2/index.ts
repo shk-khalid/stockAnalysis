@@ -6,5 +6,6 @@ export { FeaturesGrid } from './FeaturesGrid';
 export { DataSources } from './DataSources';
 export { TechStack } from './TechStack';
 export { BeginnerSection } from './BeginnerSection';
+export { FAQ } from './FAQ';
 export { Features } from './Features';
 export { Footer } from './Footer';

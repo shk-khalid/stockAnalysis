@@ -7,6 +7,7 @@ import {
     DataSources,
     TechStack,
     BeginnerSection,
+    FAQ,
     Footer
 } from '../components/landing_v2';
 
@@ -21,6 +22,7 @@ export function LandingPageV2() {
             <DataSources />
             <TechStack />
             <BeginnerSection />
+            <FAQ />
             <Footer />
         </div>
     );
